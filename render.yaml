@@ -1,0 +1,19 @@
+# Render Blueprint: бот как бесплатный веб-сервис. База данных — во внешнем Supabase.
+# Render → New → Blueprint → выбрать этот репозиторий. Секреты Render спросит при создании.
+services:
+  - type: web
+    name: safechat-ai
+    runtime: python
+    plan: free
+    region: frankfurt
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.6
+      - key: BOT_TOKEN
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: DATABASE_URL  # строка подключения Supabase (Session pooler)
+        sync: false
