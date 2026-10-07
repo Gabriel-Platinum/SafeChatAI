@@ -22,6 +22,7 @@ def main_menu(has_chats: bool) -> InlineKeyboardMarkup:
     rows = [[Button("➕ Подключить чат", callback_data="m:connect")]]
     if has_chats:
         rows.append([Button("💬 Мои чаты", callback_data="m:chats")])
+        rows.append([Button("📊 Статистика", callback_data="stats:all")])
     rows.append([Button("📖 Как это работает", callback_data="m:how:0")])
     return InlineKeyboardMarkup(rows)
 
@@ -60,6 +61,7 @@ def skip_keyboard(chat_id: int, step: str) -> InlineKeyboardMarkup:
 
 def chat_card_keyboard(chat: db.Chat) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
+        [Button("📊 Статистика", callback_data=f"stats:{chat.id}")],
         [Button("📝 Паспорт чата", callback_data=f"m:pass:{chat.id}")],
         [Button(f"🎚 Чувствительность: {texts.SENSITIVITY[chat.sensitivity]}", callback_data=f"m:sens:{chat.id}")],
         [Button("🔌 Отключить чат", callback_data=f"m:disc:{chat.id}")],

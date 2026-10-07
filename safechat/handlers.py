@@ -85,6 +85,21 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await send_stats(context.bot, update.effective_user.id, chats)
 
 
+async def on_stats_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    target = query.data.split(":")[1]
+    if target == "all":
+        chats = await db.mediated_chats(query.from_user.id)
+    else:
+        chat = await private.own_chat(query.from_user.id, int(target))
+        chats = [chat] if chat else []
+    if not chats:
+        await query.answer("Нет доступных чатов", show_alert=True)
+        return
+    await query.answer()
+    await send_stats(context.bot, query.from_user.id, chats)
+
+
 async def on_prevent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     chat = await private.own_chat(query.from_user.id, int(query.data.split(":")[1]))
@@ -151,6 +166,7 @@ def register(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(private.on_menu, pattern=r"^m:"))
     app.add_handler(CallbackQueryHandler(on_advice, pattern=r"^advice:\d+$"))
     app.add_handler(CallbackQueryHandler(on_prevent, pattern=r"^prevent:-?\d+$"))
+    app.add_handler(CallbackQueryHandler(on_stats_button, pattern=r"^stats:(all|-?\d+)$"))
     app.add_handler(MessageHandler(PRIVATE & NEW & filters.TEXT & ~filters.COMMAND, private.on_private_text))
 
     # Группы

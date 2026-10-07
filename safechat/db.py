@@ -393,5 +393,6 @@ async def incidents_since(chat_id: int, days: int) -> list[Incident]:
     async with Session() as s:
         rows = await s.scalars(
             select(Incident).where(Incident.chat_id == chat_id, Incident.created_at >= utcnow() - timedelta(days=days))
+            .order_by(Incident.created_at)
         )
         return list(rows.all())
