@@ -8,8 +8,17 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _clean(name: str, value: str) -> str:
+    """Прощает типичные ошибки вставки в панели хостинга: пробелы, переносы строк, кавычки
+    и строку целиком вида NAME=value (скопированную из .env)."""
+    value = value.strip()
+    if value.startswith(f"{name}="):
+        value = value[len(name) + 1:].strip()
+    return value.strip("\"'")
+
+
 def _require(name: str) -> str:
-    value = os.getenv(name)
+    value = _clean(name, os.getenv(name) or "")
     if not value:
         raise RuntimeError(f"Не задана переменная окружения {name} (см. .env.example)")
     return value
@@ -28,7 +37,7 @@ BOT_TOKEN = _require("BOT_TOKEN")
 GROQ_API_KEY = _require("GROQ_API_KEY")
 
 # Локально — файл SQLite, на сервере — PostgreSQL (Supabase) из DATABASE_URL.
-DATABASE_URL = _async_db_url(os.getenv("DATABASE_URL", "sqlite+aiosqlite:///safechat.db"))
+DATABASE_URL = _async_db_url(_clean("DATABASE_URL", os.getenv("DATABASE_URL") or "sqlite+aiosqlite:///safechat.db"))
 
 # Модели Groq: быстрый отсев + «консилиум» из моделей разных компаний.
 SCREEN_MODEL = os.getenv("SCREEN_MODEL", "openai/gpt-oss-20b")

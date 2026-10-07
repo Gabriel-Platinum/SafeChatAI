@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import re
 from dataclasses import dataclass
 
 from groq import AsyncGroq
@@ -196,12 +197,32 @@ async def judge(context: str) -> list[Verdict]:
     return verdicts
 
 
-def _error_chain(err: BaseException) -> str:
+_SECRET_PATTERNS = [
+    re.compile(r"gsk_[A-Za-z0-9]+"),  # ключи Groq
+    re.compile(r"\d{6,12}:[A-Za-z0-9_-]{30,}"),  # токены Telegram-ботов
+    re.compile(r"(postgres(?:ql)?(?:\+\w+)?://[^:/\s]+:)[^@\s]+@"),  # пароль в строке подключения к базе
+]
+
+
+def redact(text: str) -> str:
+    """Убирает секреты из текста ошибок — они не должны попадать в базу, логи и сообщения."""
+    for secret in (config.GROQ_API_KEY, config.BOT_TOKEN):
+        text = text.replace(secret, "***")
+    text = _SECRET_PATTERNS[0].sub("gsk_***", text)
+    text = _SECRET_PATTERNS[1].sub("***", text)
+    return _SECRET_PATTERNS[2].sub(r"\1***@", text)
+
+
+def error_chain(err: BaseException, limit: int = 5) -> str:
+    """Цепочка причин ошибки («Connection error» — обёртка, настоящая причина внутри), без секретов."""
     chain = []
-    while err is not None and len(chain) < 5:
+    while err is not None and len(chain) < limit:
         chain.append(f"{type(err).__name__}: {str(err)[:200]}")
         err = err.__cause__ or err.__context__
-    return " <- ".join(chain)
+    return redact(" <- ".join(chain))
+
+
+
 
 
 async def connectivity_report() -> str:
@@ -217,7 +238,7 @@ async def connectivity_report() -> str:
         infos = await asyncio.get_running_loop().getaddrinfo(host, 443, type=socket.SOCK_STREAM)
         lines.append("DNS: " + ", ".join(sorted({f"{'v6' if i[0] == socket.AF_INET6 else 'v4'} {i[4][0]}" for i in infos})))
     except Exception as err:
-        lines.append(f"DNS: ошибка {_error_chain(err)}")
+        lines.append(f"DNS: ошибка {error_chain(err)}")
     for family, label in ((socket.AF_INET, "TCP v4"), (socket.AF_INET6, "TCP v6")):
         try:
             started = time.monotonic()
@@ -225,19 +246,19 @@ async def connectivity_report() -> str:
             writer.close()
             lines.append(f"{label}: ok {time.monotonic() - started:.2f}s")
         except Exception as err:
-            lines.append(f"{label}: {_error_chain(err)}")
+            lines.append(f"{label}: {error_chain(err)}")
     try:
         models = await client.models.list()
         lines.append(f"SDK: ok, моделей {len(models.data)}")
     except Exception as err:
-        lines.append(f"SDK: {_error_chain(err)}")
+        lines.append(f"SDK: {error_chain(err)}")
     try:
         async with httpx.AsyncClient(timeout=20) as raw:
             response = await raw.get(f"https://{host}/openai/v1/models",
                                      headers={"Authorization": f"Bearer {config.GROQ_API_KEY}"})
         lines.append(f"httpx: HTTP {response.status_code}")
     except Exception as err:
-        lines.append(f"httpx: {_error_chain(err)}")
+        lines.append(f"httpx: {error_chain(err)}")
     return "\n".join(lines)
 
 
