@@ -5,12 +5,13 @@
 т.к. бесплатный тариф Render даёт только веб-сервисы.
 """
 
+import asyncio
 import logging
 
 from telegram import BotCommand, BotCommandScopeAllGroupChats, BotCommandScopeAllPrivateChats, Update
 from telegram.ext import Application
 
-from safechat import config, db, handlers, texts
+from safechat import ai, config, db, handlers, texts
 from safechat.monitor import ChatMonitor
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -43,6 +44,17 @@ async def on_startup(app: Application) -> None:
     app.bot_data["monitor"] = monitor
     await setup_bot_profile(app)
     await monitor.catch_up()
+    app.bot_data["diag_task"] = asyncio.create_task(check_ai_connectivity())
+
+
+async def check_ai_connectivity() -> None:
+    """Проверяет связь с ИИ и записывает отчёт в базу (таблица diagnostics) — его видно без логов Render."""
+    try:
+        report = await ai.connectivity_report()
+        logger.info("Проверка связи с ИИ:\n%s", report)
+        await db.set_diagnostic("groq", report)
+    except Exception:
+        logger.exception("Проверка связи с ИИ не удалась")
 
 
 def create_app() -> Application:

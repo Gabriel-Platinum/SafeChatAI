@@ -196,6 +196,51 @@ async def judge(context: str) -> list[Verdict]:
     return verdicts
 
 
+def _error_chain(err: BaseException) -> str:
+    chain = []
+    while err is not None and len(chain) < 5:
+        chain.append(f"{type(err).__name__}: {str(err)[:200]}")
+        err = err.__cause__ or err.__context__
+    return " <- ".join(chain)
+
+
+async def connectivity_report() -> str:
+    """Проверка связи с Groq с сервера: адреса, TCP, запрос через SDK и через чистый httpx."""
+    import socket
+    import time
+
+    import httpx
+
+    host = "api.groq.com"
+    lines = []
+    try:
+        infos = await asyncio.get_running_loop().getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+        lines.append("DNS: " + ", ".join(sorted({f"{'v6' if i[0] == socket.AF_INET6 else 'v4'} {i[4][0]}" for i in infos})))
+    except Exception as err:
+        lines.append(f"DNS: ошибка {_error_chain(err)}")
+    for family, label in ((socket.AF_INET, "TCP v4"), (socket.AF_INET6, "TCP v6")):
+        try:
+            started = time.monotonic()
+            _, writer = await asyncio.wait_for(asyncio.open_connection(host, 443, family=family), 10)
+            writer.close()
+            lines.append(f"{label}: ok {time.monotonic() - started:.2f}s")
+        except Exception as err:
+            lines.append(f"{label}: {_error_chain(err)}")
+    try:
+        models = await client.models.list()
+        lines.append(f"SDK: ok, моделей {len(models.data)}")
+    except Exception as err:
+        lines.append(f"SDK: {_error_chain(err)}")
+    try:
+        async with httpx.AsyncClient(timeout=20) as raw:
+            response = await raw.get(f"https://{host}/openai/v1/models",
+                                     headers={"Authorization": f"Bearer {config.GROQ_API_KEY}"})
+        lines.append(f"httpx: HTTP {response.status_code}")
+    except Exception as err:
+        lines.append(f"httpx: {_error_chain(err)}")
+    return "\n".join(lines)
+
+
 async def safety_check(message: str, dialog: str, passport: str) -> tuple[bool, str, str]:
     """(реальный ли сигнал, тип self_harm/threat/none, объяснение)."""
     user = f"О чате:\n{passport}\n\nПереписка перед сообщением:\n{dialog}\n\nПроверяемое сообщение:\n{message}"

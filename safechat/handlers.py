@@ -27,9 +27,13 @@ async def ai_reply(message, title: str, request) -> None:
         text = await request
     except Exception as err:
         logger.exception("Запрос к ИИ не удался")
+        chain, cause = [], err
+        while cause is not None and len(chain) < 4:  # «Connection error» — обёртка, настоящая причина внутри
+            chain.append(f"{type(cause).__name__}: {str(cause)[:150]}")
+            cause = cause.__cause__ or cause.__context__
         await message.reply_text(
             "😔 Не получилось получить ответ от ИИ. Попробуйте ещё раз через минуту.\n\n"
-            f"Техническая причина: {type(err).__name__}: {str(err)[:200]}")
+            "Техническая причина:\n" + "\n← ".join(chain))
         return
     await message.reply_text(f"{title}\n\n{text or 'ИИ вернул пустой ответ, попробуйте ещё раз.'}"[:4096])
 

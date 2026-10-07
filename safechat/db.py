@@ -116,6 +116,15 @@ class Incident(Base):
         return [int(x) for x in self.participant_ids.split(",") if x]
 
 
+class Diagnostic(Base):
+    """Служебные отчёты сервера (например, проверка связи с ИИ при запуске)."""
+    __tablename__ = "diagnostics"
+
+    key: Mapped[str] = mapped_column(String(32), primary_key=True)
+    value: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
 CHAT_ID_TABLES = (Member, ChatMessage, Screening, Incident)
 
 
@@ -158,6 +167,15 @@ async def init_db() -> None:
             # закрывает к ним доступ снаружи; бот — владелец таблиц, на него RLS не действует.
             for table in Base.metadata.sorted_tables:
                 await conn.execute(text(f'ALTER TABLE "{table.name}" ENABLE ROW LEVEL SECURITY'))
+
+
+async def set_diagnostic(key: str, value: str) -> None:
+    async with Session() as s, s.begin():
+        row = await s.get(Diagnostic, key)
+        if row is None:
+            s.add(Diagnostic(key=key, value=value))
+        else:
+            row.value, row.updated_at = value, utcnow()
 
 
 # ---------- Пользователи ----------
