@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from groq import AsyncGroq
 
 from safechat import config
-from safechat.db import ChatMessage, Member
+from safechat.db import Chat, ChatMessage, Member
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,14 @@ ADVICE_PROMPT = """Ты — профессиональный медиатор. �
 5. Как не допустить повторения.
 Сведения об участниках от медиатора конфиденциальны: учитывай их, но не предлагай раскрывать или упоминать их участникам."""
 
-PREVENTION_PROMPT = """Ты — консультант по здоровой коммуникации в сообществах. По статистике группового чата \
+SAFETY_PROMPT = """Ты проверяешь сообщение из группового чата на тревожные сигналы: реальная угроза жизни или \
+здоровью другого человека, либо признаки того, что автор думает о самоубийстве или самоповреждении.
+Отличай реальные сигналы от гипербол и шуток между своими («убью тебя, если опоздаешь 😂», «я умер со смеху»). \
+Явные маркеры шутки (😂, «ахах», условная гипербола вида «если …, я тебя убью») обычно означают шутку, даже если до этого в чате был спор: оценивай само сообщение и то, как автор относится к адресату. Учитывай нормы чата. При сомнении в признаках суицида или самоповреждения считай сигнал реальным — безопасность важнее.
+Верни строго JSON: {"real": true или false, "kind": "self_harm" или "threat" или "none", \
+"reason": "<одно предложение по-русски: почему>"}"""
+
+PREVENTION_PROMPT ="""Ты — консультант по здоровой коммуникации в сообществах. По статистике группового чата \
 дай медиатору 3-5 конкретных рекомендаций по профилактике конфликтов. Опирайся на цифры, не выдумывай фактов. \
 По-русски, простым текстом без markdown, списком через «•»."""
 
@@ -74,6 +81,20 @@ def format_dialog(messages: list[ChatMessage]) -> str:
         who = m.name + (f" → {m.reply_to_name}" if m.reply_to_name else "")
         lines.append(f"[{m.created_at:%H:%M}] {who}: {m.text}")
     return "\n".join(lines)
+
+
+def format_passport(chat: Chat) -> str:
+    """Паспорт чата для ИИ: что за чат и какие в нём нормы общения."""
+    from safechat.texts import CHAT_KINDS
+
+    parts = []
+    if chat.kind:
+        parts.append("Тип чата: " + CHAT_KINDS.get(chat.kind, chat.kind).split(" ", 1)[-1])
+    if chat.purpose:
+        parts.append(f"Цель чата: {chat.purpose}")
+    if chat.norms:
+        parts.append(f"Принятые нормы общения (со слов медиатора): {chat.norms}")
+    return "\n".join(parts) or "Сведений о чате нет."
 
 
 def format_members(members: list[Member]) -> str:
@@ -124,12 +145,13 @@ def _clamp(value) -> float:
     return max(0.0, min(10.0, float(value)))
 
 
-async def screen(dialog: str) -> tuple[float, str]:
+async def screen(dialog: str, passport: str) -> tuple[float, str]:
     """Быстрая оценка напряжения. Если модель упёрлась в лимит — пробуем следующую."""
     models = list(dict.fromkeys([config.SCREEN_MODEL, *config.JUDGE_MODELS]))
+    user = f"О чате:\n{passport}\n\nПереписка:\n{dialog}"
     for i, model in enumerate(models):
         try:
-            data = await _ask_json(model, SCREEN_PROMPT, dialog)
+            data = await _ask_json(model, SCREEN_PROMPT, user)
             return _clamp(data["tension"]), str(data.get("reason", ""))
         except Exception as e:
             if i == len(models) - 1:
@@ -159,6 +181,13 @@ async def judge(context: str) -> list[Verdict]:
         except (KeyError, TypeError, ValueError):
             logger.warning("Модель %s вернула некорректный ответ: %r", model, data)
     return verdicts
+
+
+async def safety_check(message: str, dialog: str, passport: str) -> tuple[bool, str, str]:
+    """(реальный ли сигнал, тип self_harm/threat/none, объяснение)."""
+    user = f"О чате:\n{passport}\n\nПереписка перед сообщением:\n{dialog}\n\nПроверяемое сообщение:\n{message}"
+    data = await _ask_json(config.ADVICE_MODEL, SAFETY_PROMPT, user)
+    return bool(data.get("real")), str(data.get("kind", "none")), str(data.get("reason", ""))
 
 
 async def mediation_advice(context: str) -> str:

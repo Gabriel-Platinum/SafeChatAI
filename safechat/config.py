@@ -35,8 +35,12 @@ SCREEN_MODEL = os.getenv("SCREEN_MODEL", "openai/gpt-oss-20b")
 JUDGE_MODELS = [m.strip() for m in os.getenv("JUDGE_MODELS", "openai/gpt-oss-120b,qwen/qwen3.8-27b").split(",") if m.strip()]
 ADVICE_MODEL = os.getenv("ADVICE_MODEL", "openai/gpt-oss-120b")
 
-SCREEN_THRESHOLD = int(os.getenv("SCREEN_THRESHOLD", "4"))  # с какого напряжения звать консилиум
-ALERT_THRESHOLD = float(os.getenv("ALERT_THRESHOLD", "6"))  # с какого уровня уведомлять медиатора
+# Чувствительность чата (выбирает медиатор): (с какого напряжения звать консилиум, с какого уровня уведомлять).
+SENSITIVITY = {
+    "low": (5, 7.0),
+    "medium": (4, 6.0),
+    "high": (3, 5.0),
+}
 
 DEBOUNCE_SECONDS = 15  # ждём паузу в переписке, чтобы анализировать пачкой
 BATCH_SIZE = 10  # ...но не дольше, чем столько новых сообщений

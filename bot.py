@@ -7,10 +7,10 @@
 
 import logging
 
-from telegram import Update
+from telegram import BotCommand, BotCommandScopeAllGroupChats, BotCommandScopeAllPrivateChats, Update
 from telegram.ext import Application
 
-from safechat import config, db, handlers
+from safechat import config, db, handlers, texts
 from safechat.monitor import ChatMonitor
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -18,9 +18,30 @@ logging.getLogger("httpx").setLevel(logging.WARNING)  # не логироват�
 logger = logging.getLogger("safechat")
 
 
+async def setup_bot_profile(app: Application) -> None:
+    """Описание бота и меню команд: только в личке, в группах команд не показываем."""
+    bot = app.bot
+    commands = [
+        BotCommand("start", "Главное меню"),
+        BotCommand("chats", "Мои чаты"),
+        BotCommand("help", "Как это работает"),
+    ]
+    try:
+        await bot.delete_my_commands()
+        await bot.delete_my_commands(scope=BotCommandScopeAllGroupChats())
+        await bot.set_my_commands(commands, scope=BotCommandScopeAllPrivateChats())
+        await bot.set_my_description(texts.BOT_DESCRIPTION)
+        await bot.set_my_short_description(texts.BOT_SHORT_DESCRIPTION)
+    except Exception:
+        logger.warning("Не удалось обновить описание и команды бота", exc_info=True)
+
+
 async def on_startup(app: Application) -> None:
     await db.init_db()
-    app.bot_data["monitor"] = ChatMonitor(app.bot)
+    monitor = ChatMonitor(app.bot)
+    app.bot_data["monitor"] = monitor
+    await setup_bot_profile(app)
+    await monitor.catch_up()
 
 
 def create_app() -> Application:
