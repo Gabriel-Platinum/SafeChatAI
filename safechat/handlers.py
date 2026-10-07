@@ -107,8 +107,10 @@ async def on_prevent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await private.answer(query, "Недоступно", show_alert=True)
         return
     await private.answer(query, "Анализирую статистику…")
-    stats = format_stats(chat, await db.get_members(chat.id), await db.incidents_since(chat.id, 30))
-    advice = await ai.prevention_advice(stats)
+    members = await db.get_members(chat.id)
+    stats = format_stats(chat, members, await db.incidents_since(chat.id, 30))
+    advice = await ai.prevention_advice(
+        f"О чате:\n{ai.format_passport(chat)}\n\nСтатистика:\n{stats}\n\nУчастники:\n{ai.format_members(members)}")
     await query.message.reply_text(f"🛡 Профилактика для «{chat.title}»\n\n{advice}"[:4096])
 
 
