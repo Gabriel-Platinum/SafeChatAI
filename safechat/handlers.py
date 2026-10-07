@@ -21,6 +21,19 @@ PRIVATE = filters.ChatType.PRIVATE
 NEW = filters.UpdateType.MESSAGE  # без этого MessageHandler ловит и правки сообщений
 
 
+async def ai_reply(message, title: str, request) -> None:
+    """Отправляет ответ ИИ. Если ИИ недоступен — честно сообщает об этом, а не молчит."""
+    try:
+        text = await request
+    except Exception as err:
+        logger.exception("Запрос к ИИ не удался")
+        await message.reply_text(
+            "😔 Не получилось получить ответ от ИИ. Попробуйте ещё раз через минуту.\n\n"
+            f"Техническая причина: {type(err).__name__}: {str(err)[:200]}")
+        return
+    await message.reply_text(f"{title}\n\n{text or 'ИИ вернул пустой ответ, попробуйте ещё раз.'}"[:4096])
+
+
 # ---------- Заметки об участниках (до фазы 2) ----------
 
 async def cmd_about(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -109,9 +122,8 @@ async def on_prevent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await private.answer(query, "Анализирую статистику…")
     members = await db.get_members(chat.id)
     stats = format_stats(chat, members, await db.incidents_since(chat.id, 30))
-    advice = await ai.prevention_advice(
-        f"О чате:\n{ai.format_passport(chat)}\n\nСтатистика:\n{stats}\n\nУчастники:\n{ai.format_members(members)}")
-    await query.message.reply_text(f"🛡 Профилактика для «{chat.title}»\n\n{advice}"[:4096])
+    await ai_reply(query.message, f"🛡 Профилактика для «{chat.title}»", ai.prevention_advice(
+        f"О чате:\n{ai.format_passport(chat)}\n\nСтатистика:\n{stats}\n\nУчастники:\n{ai.format_members(members)}"))
 
 
 # ---------- Советы по медиации (до фазы 3) ----------
@@ -135,8 +147,7 @@ async def cmd_advice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await update.message.reply_text("Конфликтов в ваших чатах пока не было.")
         return
     await update.message.reply_text("Готовлю советы…")
-    advice = await ai.mediation_advice(await build_advice_context(incident))
-    await update.message.reply_text(f"💡 Советы по медиации\n\n{advice}"[:4096])
+    await ai_reply(update.message, "💡 Советы по медиации", ai.mediation_advice(await build_advice_context(incident)))
 
 
 async def on_advice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -147,8 +158,7 @@ async def on_advice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await private.answer(query, "Недоступно", show_alert=True)
         return
     await private.answer(query, "Готовлю советы…")
-    advice = await ai.mediation_advice(await build_advice_context(incident))
-    await query.message.reply_text(f"💡 Советы по медиации\n\n{advice}"[:4096])
+    await ai_reply(query.message, "💡 Советы по медиации", ai.mediation_advice(await build_advice_context(incident)))
 
 
 # ---------- Регистрация ----------
