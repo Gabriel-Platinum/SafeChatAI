@@ -16,6 +16,15 @@ HTML = ParseMode.HTML
 SENSITIVITY_ORDER = ["low", "medium", "high"]
 
 
+async def answer(query, text: str | None = None, show_alert: bool = False) -> None:
+    """Ответ на нажатие кнопки. Telegram ждёт его несколько секунд; если бот просыпался (Render
+    засыпает без активности), ответ опаздывает и Telegram его отклоняет — само действие всё равно выполняем."""
+    try:
+        await query.answer(text, show_alert=show_alert)
+    except BadRequest as err:
+        logger.info("Ответ на нажатие кнопки опоздал: %s", err)
+
+
 # ---------- Клавиатуры ----------
 
 def main_menu(has_chats: bool) -> InlineKeyboardMarkup:
@@ -133,23 +142,23 @@ async def on_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 raise
 
     if action == "home":
-        await query.answer()
+        await answer(query)
         await show(texts.welcome(user.first_name), main_menu(bool(await db.mediated_chats(user.id))))
     elif action == "how":
-        await query.answer()
+        await answer(query)
         await show(*how_page(int(parts[2])))
     elif action == "connect":
-        await query.answer()
+        await answer(query)
         url = f"https://t.me/{context.bot.username}?startgroup=connect"
         await show(texts.CONNECT, InlineKeyboardMarkup([
             [Button("👥 Выбрать группу", url=url)],
             [Button("← Назад", callback_data="m:home")],
         ]))
     elif action == "chats":
-        await query.answer()
+        await answer(query)
         await show(*await chats_view(user.id))
     elif action == "later":
-        await query.answer()
+        await answer(query)
         await query.edit_message_reply_markup(None)
         await query.message.reply_text("Хорошо! Заполнить паспорт можно позже в разделе «Мои чаты».",
                                        reply_markup=main_menu(True))
@@ -163,9 +172,9 @@ async def on_chat_action(update: Update, context: ContextTypes.DEFAULT_TYPE, act
     user = query.from_user
     chat = await own_chat(user.id, int(args[0]))
     if chat is None:
-        await query.answer("Этот чат недоступен", show_alert=True)
+        await answer(query, "Этот чат недоступен", show_alert=True)
         return
-    await query.answer()
+    await answer(query)
 
     if action == "chat":
         await show(*await card_view(chat))

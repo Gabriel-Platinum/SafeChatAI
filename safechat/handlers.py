@@ -94,9 +94,9 @@ async def on_stats_button(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         chat = await private.own_chat(query.from_user.id, int(target))
         chats = [chat] if chat else []
     if not chats:
-        await query.answer("Нет доступных чатов", show_alert=True)
+        await private.answer(query, "Нет доступных чатов", show_alert=True)
         return
-    await query.answer()
+    await private.answer(query)
     await send_stats(context.bot, query.from_user.id, chats)
 
 
@@ -104,9 +104,9 @@ async def on_prevent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     query = update.callback_query
     chat = await private.own_chat(query.from_user.id, int(query.data.split(":")[1]))
     if chat is None:
-        await query.answer("Недоступно", show_alert=True)
+        await private.answer(query, "Недоступно", show_alert=True)
         return
-    await query.answer("Анализирую статистику…")
+    await private.answer(query, "Анализирую статистику…")
     stats = format_stats(chat, await db.get_members(chat.id), await db.incidents_since(chat.id, 30))
     advice = await ai.prevention_advice(stats)
     await query.message.reply_text(f"🛡 Профилактика для «{chat.title}»\n\n{advice}"[:4096])
@@ -142,9 +142,9 @@ async def on_advice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     incident = await db.get_incident(int(query.data.split(":")[1]))
     chat = await private.own_chat(query.from_user.id, incident.chat_id) if incident else None
     if chat is None:
-        await query.answer("Недоступно", show_alert=True)
+        await private.answer(query, "Недоступно", show_alert=True)
         return
-    await query.answer("Готовлю советы…")
+    await private.answer(query, "Готовлю советы…")
     advice = await ai.mediation_advice(await build_advice_context(incident))
     await query.message.reply_text(f"💡 Советы по медиации\n\n{advice}"[:4096])
 
