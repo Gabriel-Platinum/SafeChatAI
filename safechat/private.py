@@ -8,7 +8,7 @@ from telegram.constants import ParseMode
 from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 
-from safechat import db, texts
+from safechat import coach, db, texts
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +33,7 @@ def main_menu(has_chats: bool) -> InlineKeyboardMarkup:
         rows.append([Button("💬 Мои чаты", callback_data="m:chats")])
         rows.append([Button("📊 Статистика", callback_data="stats:all")])
     rows.append([Button("📖 Как это работает", callback_data="m:how:0")])
+    rows.append([Button("🤝 Разобрать мой конфликт", callback_data="c:start")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -102,6 +103,11 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     await db.upsert_user(user.id, user.full_name, user.username, started=True)
     await db.set_user_state(user.id, None)
+
+    # Ссылка t.me/<бот>?start=conflict (QR-код на форуме) — сразу в «Помоги с конфликтом».
+    if context.args and context.args[0] == "conflict":
+        await coach.start(update.message, user.id)
+        return
 
     # Чаты, которые человек подключил, ещё не открыв бота: сообщаем о них вместо обычного приветствия.
     pending = await db.unnotified_chats(user.id)
@@ -229,7 +235,11 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     db_user = await db.get_user(user.id)
     state = db_user.state if db_user else None
     if not state:
-        await update.message.reply_text("Я пока понимаю кнопки и команды. Откройте меню: /start")
+        if not await coach.on_text(update, context):
+            await update.message.reply_text(texts.COACH_HINT)
+        return
+    if not update.message.text:
+        await update.message.reply_text("Ответьте, пожалуйста, текстом или нажмите «Пропустить».")
         return
 
     step, chat_id = state.split(":")

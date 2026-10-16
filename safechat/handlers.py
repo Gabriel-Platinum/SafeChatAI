@@ -12,7 +12,7 @@ from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (Application, CallbackQueryHandler, ChatMemberHandler, CommandHandler, ContextTypes,
                           MessageHandler, filters)
 
-from safechat import ai, db, group, private
+from safechat import ai, coach, db, group, private
 
 logger = logging.getLogger(__name__)
 
@@ -179,7 +179,10 @@ def register(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(on_advice, pattern=r"^advice:\d+$"))
     app.add_handler(CallbackQueryHandler(on_prevent, pattern=r"^prevent:-?\d+$"))
     app.add_handler(CallbackQueryHandler(on_stats_button, pattern=r"^stats:(all|-?\d+)$"))
-    app.add_handler(MessageHandler(PRIVATE & NEW & filters.TEXT & ~filters.COMMAND, private.on_private_text))
+    app.add_handler(CommandHandler("conflict", coach.cmd_conflict, filters=PRIVATE & NEW))
+    app.add_handler(CallbackQueryHandler(coach.on_button, pattern=r"^c:"))
+    # Любые сообщения в личке (текст, пересланные, фото с подписью): паспорт чата или «Помоги с конфликтом»
+    app.add_handler(MessageHandler(PRIVATE & NEW & ~filters.COMMAND, private.on_private_text))
 
     # Группы
     app.add_handler(ChatMemberHandler(group.on_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))

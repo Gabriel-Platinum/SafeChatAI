@@ -26,6 +26,7 @@ async def setup_bot_profile(app: Application) -> None:
         BotCommand("start", "Главное меню"),
         BotCommand("chats", "Мои чаты"),
         BotCommand("stats", "Статистика"),
+        BotCommand("conflict", "Разобрать мой конфликт"),
         BotCommand("help", "Как это работает"),
     ]
     try:
